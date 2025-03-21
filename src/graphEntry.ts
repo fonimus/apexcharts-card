@@ -290,6 +290,8 @@ export default class GraphEntry {
                 displayDate = new Date(startDate.getTime() + 43200000); // 12h
               } else if (this._config.statistics.period === 'week') {
                 displayDate = new Date(startDate.getTime() + 259200000); // 3.5d
+              } else if (this._config.statistics.period === 'month') {
+                displayDate = new Date(startDate.getTime() + 1296000000); // 15d
               } else {
                 displayDate = new Date(startDate.getTime() + 1296000000); // 15d
               }
@@ -473,6 +475,16 @@ export default class GraphEntry {
     end: Date | undefined,
     period: StatisticsPeriod = DEFAULT_STATISTICS_PERIOD,
   ): Promise<StatisticValue[] | undefined> {
+    const statistic = await this._hass?.callWS<StatisticValue>({
+      type: 'recorder/statistic_during_period',
+      statistic_id: this._entityID,
+      calendar: {
+        period
+      }
+    });
+    if (statistic) {
+      return [statistic];
+    }
     const statistics = await this._hass?.callWS<Statistics>({
       type: 'recorder/statistics_during_period',
       start_time: start?.toISOString(),
