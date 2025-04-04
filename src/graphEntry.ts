@@ -264,7 +264,7 @@ export default class GraphEntry {
       let updateGraphHistory = false;
 
       if (this._config.statistics) {
-        const newHistory = await this._fetchStatistics(fetchStart, fetchEnd, this._config.statistics.period);
+        const newHistory = await this._fetchStatistics(fetchStart, fetchEnd, this._config.statistics.period, this._config.statistics.offset);
         if (newHistory && newHistory.length > 0) {
           updateGraphHistory = true;
           let lastNonNull: number | null = null;
@@ -474,13 +474,17 @@ export default class GraphEntry {
     start: Date | undefined,
     end: Date | undefined,
     period: StatisticsPeriod = DEFAULT_STATISTICS_PERIOD,
+    offset: number | undefined,
   ): Promise<StatisticValue[] | undefined> {
     const statistic = await this._hass?.callWS<StatisticValue>({
       type: 'recorder/statistic_during_period',
       statistic_id: this._entityID,
       calendar: {
         period
-      }
+      },
+      ...(offset && {
+        offset: offset,
+      })
     });
     if (statistic) {
       return [statistic];
