@@ -14,7 +14,11 @@ import { compress, decompress, log } from './utils';
 import localForage from 'localforage';
 import { HassEntity } from 'home-assistant-js-websocket';
 import { DateRange } from 'moment-range';
-import { DEFAULT_STATISTICS_PERIOD, DEFAULT_STATISTICS_TYPE, moment } from './const';
+import {
+  DEFAULT_STATISTICS_PERIOD,
+  DEFAULT_STATISTICS_TYPE,
+  moment,
+} from './const';
 import parse from 'parse-duration';
 import SparkMD5 from 'spark-md5';
 import { ChartCardSpanExtConfig, StatisticsPeriod } from './types-config';
@@ -142,7 +146,10 @@ export default class GraphEntry {
   ): { min: HistoryPoint; max: HistoryPoint } | undefined {
     if (!this._computedHistory || this._computedHistory.length === 0) return undefined;
     if (this._computedHistory.length === 1)
-      return { min: [start, this._computedHistory[0][1]], max: [end, this._computedHistory[0][1]] };
+      return {
+        min: [start, this._computedHistory[0][1]],
+        max: [end, this._computedHistory[0][1]],
+      };
     const minMax = this._computedHistory.reduce(
       (acc: { min: HistoryPoint; max: HistoryPoint }, point) => {
         if (point[1] === null) return acc;
@@ -160,7 +167,10 @@ export default class GraphEntry {
     return minMax;
   }
 
-  public minMaxWithTimestampForYAxis(start: number, end: number): { min: HistoryPoint; max: HistoryPoint } | undefined {
+  public minMaxWithTimestampForYAxis(start: number, end: number): {
+    min: HistoryPoint;
+    max: HistoryPoint
+  } | undefined {
     if (!this._computedHistory || this._computedHistory.length === 0) return undefined;
     let lastTimestampBeforeStart = start;
     const lastHistoryIndexBeforeStart =
@@ -256,7 +266,7 @@ export default class GraphEntry {
       // if data in cache, get data from last data's time + 1ms
       const fetchStart = usableCache
         ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          new Date(history!.data[history!.data.length - 1][0] + 1)
+        new Date(history!.data[history!.data.length - 1][0] + 1)
         : new Date(startHistory.getTime() + (this._config.group_by.func !== 'raw' ? 0 : -1));
       const fetchEnd = end;
 
@@ -264,7 +274,7 @@ export default class GraphEntry {
       let updateGraphHistory = false;
 
       if (this._config.statistics) {
-        const newHistory = await this._fetchStatistics(fetchStart, fetchEnd, this._config.statistics.period, this._config.statistics.offset);
+        const newHistory = await this._fetchStatistics(fetchStart, fetchEnd, this._config.statistics.period, this._config.statistics.offset, this._config.statistics.energy_dates);
         if (newHistory && newHistory.length > 0) {
           updateGraphHistory = true;
           let lastNonNull: number | null = null;
@@ -437,7 +447,8 @@ export default class GraphEntry {
 
   private async _generateData(start: Date, end: Date): Promise<EntityEntryCache> {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const AsyncFunction = Object.getPrototypeOf(async function() {
+    }).constructor;
     let data;
     try {
       const datafn = new AsyncFunction(
@@ -455,9 +466,9 @@ export default class GraphEntry {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         this._config.data_generator!.length <= 100
           ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            this._config.data_generator!.trim()
+          this._config.data_generator!.trim()
           : // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            `${this._config.data_generator!.trim().substring(0, 98)}...`;
+          `${this._config.data_generator!.trim().substring(0, 98)}...`;
       e.message = `${e.name}: ${e.message} in '${funcTrimmed}'`;
       e.name = 'Error';
       throw e;
@@ -474,17 +485,35 @@ export default class GraphEntry {
     start: Date | undefined,
     end: Date | undefined,
     period: StatisticsPeriod = DEFAULT_STATISTICS_PERIOD,
-    offset: number | undefined,
+    _offset: number | undefined,
+    energy_dates: boolean | undefined,
   ): Promise<StatisticValue[] | undefined> {
+    if (energy_dates) {
+      const energy = this._hass?.connection['_energy'];
+      if (energy) {
+        const newStartDate = energy.state?.start || energy.start;
+        const newEndDate = energy.state?.end || energy.end;
+        if (newStartDate && newEndDate) {
+          const statistic = await this._hass?.callWS<StatisticValue>({
+            type: 'recorder/statistic_during_period',
+            statistic_id: this._entityID,
+            fixed_period: {
+              start_time: newStartDate,
+              end_time: newEndDate,
+            },
+          });
+          if (statistic) {
+            return [statistic];
+          }
+        }
+      }
+    }
     const statistic = await this._hass?.callWS<StatisticValue>({
       type: 'recorder/statistic_during_period',
       statistic_id: this._entityID,
       calendar: {
-        period
+        period,
       },
-      ...(offset && {
-        offset: offset,
-      })
     });
     if (statistic) {
       return [statistic];
@@ -558,7 +587,7 @@ export default class GraphEntry {
       buckets.length > 0 &&
       (buckets[buckets.length - 1].data.length === 0 ||
         (buckets[buckets.length - 1].data.length === 1 && buckets[buckets.length - 1].data[0][1] === null))
-    ) {
+      ) {
       buckets.pop();
     }
     return buckets;

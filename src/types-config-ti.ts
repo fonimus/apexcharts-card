@@ -83,6 +83,7 @@ export const ChartCardAllSeriesExternalConfig = t.iface([], {
     "period": t.opt("StatisticsPeriod"),
     "offset": t.opt("number"),
     "align": t.opt(t.union(t.lit('start'), t.lit('end'), t.lit('middle'))),
+    "energy_dates": t.opt("boolean"),
   })),
   "float_precision": t.opt("number"),
   "min": t.opt("number"),

@@ -83,6 +83,7 @@ export interface ChartCardAllSeriesExternalConfig {
     period?: StatisticsPeriod;
     offset?: number;
     align?: 'start' | 'end' | 'middle';
+    energy_dates?: boolean;
   };
   float_precision?: number;
   min?: number;

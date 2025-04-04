@@ -1,6 +1,12 @@
 import 'array-flat-polyfill';
-import { LitElement, html, TemplateResult, PropertyValues, CSSResultGroup } from 'lit';
-import { property, customElement, eventOptions } from 'lit/decorators.js';
+import {
+  CSSResultGroup,
+  html,
+  LitElement,
+  PropertyValues,
+  TemplateResult,
+} from 'lit';
+import { customElement, eventOptions, property } from 'lit/decorators.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import { ClassInfo, classMap } from 'lit/directives/class-map.js';
 import {
@@ -20,13 +26,16 @@ import {
   computeColors,
   computeName,
   computeTextColor,
+  computeTimezoneDiffWithLocal,
   computeUom,
   decompress,
   formatApexDate,
   getLang,
+  getLovelace,
   getPercentFromValue,
   interpolateColor,
   is12Hour,
+  isUsingServerTimezone,
   log,
   mergeConfigTemplates,
   mergeDeep,
@@ -37,9 +46,6 @@ import {
   truncateFloat,
   validateInterval,
   validateOffset,
-  getLovelace,
-  isUsingServerTimezone,
-  computeTimezoneDiffWithLocal,
 } from './utils';
 import ApexCharts from 'apexcharts';
 import { Ripple } from '@material/mwc-ripple';
@@ -57,8 +63,14 @@ import {
 import exportedTypeSuite from './types-config-ti';
 import {
   DEFAULT_AREA_OPACITY,
+  DEFAULT_COLORS,
+  DEFAULT_DURATION,
   DEFAULT_FILL_RAW,
   DEFAULT_FLOAT_PRECISION,
+  DEFAULT_FUNC,
+  DEFAULT_GRAPH_SPAN,
+  DEFAULT_GROUP_BY_FILL,
+  DEFAULT_SERIE_TYPE,
   DEFAULT_SHOW_IN_CHART,
   DEFAULT_SHOW_IN_HEADER,
   DEFAULT_SHOW_IN_LEGEND,
@@ -66,19 +78,11 @@ import {
   DEFAULT_SHOW_NAME_IN_HEADER,
   DEFAULT_SHOW_OFFSET_IN_NAME,
   DEFAULT_UPDATE_DELAY,
+  HOUR_24,
   moment,
   NO_VALUE,
   PLAIN_COLOR_TYPES,
   TIMESERIES_TYPES,
-} from './const';
-import {
-  DEFAULT_COLORS,
-  DEFAULT_DURATION,
-  DEFAULT_FUNC,
-  DEFAULT_GROUP_BY_FILL,
-  DEFAULT_GRAPH_SPAN,
-  DEFAULT_SERIE_TYPE,
-  HOUR_24,
 } from './const';
 import parse from 'parse-duration';
 import tinycolor from '@ctrl/tinycolor';
@@ -233,6 +237,10 @@ class ChartsCard extends LitElement {
   public set hass(hass: HomeAssistant) {
     this._hass = hass;
     if (!this._config || !this._graphs || !hass) return;
+
+    this._hass?.connection['_energy']?.subscribe(() => {
+      this._updateData();
+    });
 
     this._graphs.map((graph) => {
       if (graph) graph.hass = hass;
@@ -392,7 +400,11 @@ class ChartsCard extends LitElement {
           serie.extend_to = serie.extend_to !== undefined ? serie.extend_to : 'end';
           serie.type = this._config?.chart_type ? undefined : serie.type || DEFAULT_SERIE_TYPE;
           if (!serie.group_by) {
-            serie.group_by = { duration: DEFAULT_DURATION, func: DEFAULT_FUNC, fill: DEFAULT_GROUP_BY_FILL };
+            serie.group_by = {
+              duration: DEFAULT_DURATION,
+              func: DEFAULT_FUNC,
+              fill: DEFAULT_GROUP_BY_FILL,
+            };
           } else {
             serie.group_by.duration = serie.group_by.duration || DEFAULT_DURATION;
             serie.group_by.func = serie.group_by.func || DEFAULT_FUNC;
@@ -590,7 +602,8 @@ class ChartsCard extends LitElement {
             : html``}
           <div id="graph-wrapper">
             <div id="graph"></div>
-            ${this._config.series_in_brush.length ? html`<div id="brush"></div>` : ``}
+            ${this._config.series_in_brush.length ? html`
+              <div id="brush"></div>` : ``}
           </div>
         </div>
         ${this._renderLastUpdated()}
@@ -605,7 +618,9 @@ class ChartsCard extends LitElement {
           <div style="font-weight: bold;">apexcharts-card</div>
           ${this._config?.series.map((_, index) =>
             !this._entities[index]
-              ? html` <div>Entity not available: ${this._config?.series[index].entity}</div> `
+              ? html`
+                <div>Entity not available: ${this._config?.series[index].entity}
+                </div> `
               : html``,
           )}
         </hui-warning>
@@ -637,45 +652,46 @@ class ChartsCard extends LitElement {
         ? 'disabled'
         : 'actions';
 
-    return html`<div
-      id="header__title"
-      class="${classes}"
-      @action=${(ev) => {
-        this._handleTitleAction(ev);
-      }}
-      .actionHandler=${actionHandler({
-        hasDoubleClick:
-          this._config?.header?.title_actions?.double_tap_action?.action &&
-          this._config?.header?.title_actions.double_tap_action.action !== 'none',
-        hasHold:
-          this._config?.header?.title_actions?.hold_action?.action &&
-          this._config?.header?.title_actions?.hold_action.action !== 'none',
-      })}
-      @focus="${(ev) => {
-        this.handleRippleFocus(ev, 'title');
-      }}"
-      @blur="${(ev) => {
-        this.handleRippleBlur(ev, 'title');
-      }}"
-      @mousedown="${(ev) => {
-        this.handleRippleActivate(ev, 'title');
-      }}"
-      @mouseup="${(ev) => {
-        this.handleRippleDeactivate(ev, 'title');
-      }}"
-      @touchstart="${(ev) => {
-        this.handleRippleActivate(ev, 'title');
-      }}"
-      @touchend="${(ev) => {
-        this.handleRippleDeactivate(ev, 'title');
-      }}"
-      @touchcancel="${(ev) => {
-        this.handleRippleDeactivate(ev, 'title');
-      }}"
-    >
-      <span>${this._config?.header?.title}</span>
-      <mwc-ripple unbounded id="ripple-title"></mwc-ripple>
-    </div>`;
+    return html`
+      <div
+        id="header__title"
+        class="${classes}"
+        @action=${(ev) => {
+          this._handleTitleAction(ev);
+        }}
+        .actionHandler=${actionHandler({
+          hasDoubleClick:
+            this._config?.header?.title_actions?.double_tap_action?.action &&
+            this._config?.header?.title_actions.double_tap_action.action !== 'none',
+          hasHold:
+            this._config?.header?.title_actions?.hold_action?.action &&
+            this._config?.header?.title_actions?.hold_action.action !== 'none',
+        })}
+        @focus="${(ev) => {
+          this.handleRippleFocus(ev, 'title');
+        }}"
+        @blur="${(ev) => {
+          this.handleRippleBlur(ev, 'title');
+        }}"
+        @mousedown="${(ev) => {
+          this.handleRippleActivate(ev, 'title');
+        }}"
+        @mouseup="${(ev) => {
+          this.handleRippleDeactivate(ev, 'title');
+        }}"
+        @touchstart="${(ev) => {
+          this.handleRippleActivate(ev, 'title');
+        }}"
+        @touchend="${(ev) => {
+          this.handleRippleDeactivate(ev, 'title');
+        }}"
+        @touchcancel="${(ev) => {
+          this.handleRippleDeactivate(ev, 'title');
+        }}"
+      >
+        <span>${this._config?.header?.title}</span>
+        <mwc-ripple unbounded id="ripple-title"></mwc-ripple>
+      </div>`;
   }
 
   private _renderStates(): TemplateResult {
@@ -727,19 +743,24 @@ class ChartsCard extends LitElement {
                 }}"
               >
                 <div id="state__value">
-                  <span id="state" style="${this._computeHeaderStateColor(serie, this._headerState?.[index])}"
-                    >${this._headerState?.[index] === 0
-                      ? 0
-                      : serie.show.as_duration
+                  <span id="state"
+                        style="${this._computeHeaderStateColor(serie, this._headerState?.[index])}"
+                  >${this._headerState?.[index] === 0
+                    ? 0
+                    : serie.show.as_duration
                       ? prettyPrintTime(this._headerState?.[index], serie.show.as_duration)
                       : this._computeLastState(this._headerState?.[index], index) || NO_VALUE}</span
                   >
                   ${!serie.show.as_duration
-                    ? html`<span id="uom">${computeUom(index, this._config?.series, this._entities)}</span>`
+                    ? html`<span
+                      id="uom">${computeUom(index, this._config?.series, this._entities)}</span>`
                     : ''}
                 </div>
                 ${serie.show.name_in_header
-                  ? html`<div id="state__name">${computeName(index, this._config?.series, this._entities)}</div>`
+                  ? html`
+                    <div id="state__name">
+                      ${computeName(index, this._config?.series, this._entities)}
+                    </div>`
                   : ''}
                 <mwc-ripple unbounded id="ripple-${index}"></mwc-ripple>
               </div>
@@ -754,7 +775,10 @@ class ChartsCard extends LitElement {
 
   private _renderLastUpdated(): TemplateResult {
     if (this._config?.show?.last_updated) {
-      return html` <div id="last_updated">${formatApexDate(this._config, this._hass, this._lastUpdated, true)}</div> `;
+      return html`
+        <div id="last_updated">
+          ${formatApexDate(this._config, this._hass, this._lastUpdated, true)}
+        </div> `;
     }
     return html``;
   }
@@ -998,7 +1022,10 @@ class ChartsCard extends LitElement {
         }
         const selectionColor = computeColor('var(--primary-text-color)');
         brushData.chart.selection.stroke = { color: selectionColor };
-        brushData.chart.selection.fill = { color: selectionColor, opacity: 0.1 };
+        brushData.chart.selection.fill = {
+          color: selectionColor,
+          opacity: 0.1,
+        };
         this._brushInit = true;
         this._apexBrush?.updateOptions(brushData, false, false);
       }
@@ -1306,7 +1333,7 @@ class ChartsCard extends LitElement {
       ) {
         const colors = this._colors;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        defaultColors[index] = function ({ value }, sortedL = serie.color_threshold!, defColor = colors[index]) {
+        defaultColors[index] = function({ value }, sortedL = serie.color_threshold!, defColor = colors[index]) {
           let returnValue = sortedL[0].color || defColor;
           sortedL.forEach((color) => {
             if (value > color.value) returnValue = color.color || defColor;
@@ -1630,7 +1657,12 @@ class ChartsCard extends LitElement {
 
     const foundEntities = _findEntities(hass, maxEntities, entities, entitiesFallback, includeDomains, entityFilter);
     const conf = {
-      header: { show: true, title: 'ApexCharts-Card', show_states: true, colorize_states: true },
+      header: {
+        show: true,
+        title: 'ApexCharts-Card',
+        show_states: true,
+        colorize_states: true,
+      },
       series: [] as ChartCardSeriesExternalConfig[],
     };
     if (foundEntities[0]) {
