@@ -133,6 +133,8 @@ class ChartsCard extends LitElement {
 
   private _loaded = false;
 
+  private _subscribed = false;
+
   @property({ type: Boolean }) private _updating = false;
 
   private _graphs: (GraphEntry | undefined)[] | undefined;
@@ -234,13 +236,25 @@ class ChartsCard extends LitElement {
     });
   }
 
+  private subscribeEnergy() {
+    if (!this._subscribed && this._hass?.connection['_energy']) {
+      this._hass.connection['_energy'].subscribe(() => {
+        this._updateData();
+      });
+      this._subscribed = true;
+    }
+  }
+
   public set hass(hass: HomeAssistant) {
+
     this._hass = hass;
     if (!this._config || !this._graphs || !hass) return;
 
-    this._hass?.connection['_energy']?.subscribe(() => {
-      this._updateData();
-    });
+    this.subscribeEnergy();
+    setTimeout(() => {this.subscribeEnergy()}, 0);
+    setTimeout(() => {this.subscribeEnergy()}, 100);
+    setTimeout(() => {this.subscribeEnergy()}, 300);
+    setTimeout(() => {this.subscribeEnergy()}, 500);
 
     this._graphs.map((graph) => {
       if (graph) graph.hass = hass;
